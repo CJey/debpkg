@@ -58,7 +58,9 @@ func (deb *DebPkg) SetName(name string) {
 
 // SetVersion sets the full version string (mandatory), or use SetVersion* functions for "major.minor.patch"
 // The upstream_version may contain only alphanumerics ( A-Za-z0-9 ) and the characters . + - : ~
-//  (full stop, plus, hyphen, colon, tilde) and should start with a digit.
+//
+//	(full stop, plus, hyphen, colon, tilde) and should start with a digit.
+//
 // NOTE: When the full string is set the other SetVersion* function calls are ignored
 // See: https://www.debian.org/doc/debian-policy/ch-controlfields.html#s-f-Version
 func (deb *DebPkg) SetVersion(version string) {
@@ -84,12 +86,18 @@ func (deb *DebPkg) SetVersionPatch(patch uint) {
 }
 
 // SetArchitecture sets the architecture of the package where it can be installed.
-//  E.g "i386, amd64, arm, any, all". See `dpkg-architecture -L` for all supported.
+//
+//	E.g "i386, amd64, arm, any, all". See `dpkg-architecture -L` for all supported.
+//
 // Architecture: any
-//    The generated binary package is an architecture dependent one usually in a compiled language.
+//
+//	The generated binary package is an architecture dependent one usually in a compiled language.
+//
 // Architecture: all
-//    The generated binary package is an architecture independent one usually consisting of text,
-//    images, or scripts in an interpreted language.
+//
+//	The generated binary package is an architecture independent one usually consisting of text,
+//	images, or scripts in an interpreted language.
+//
 // See: https://www.debian.org/doc/debian-policy/ch-controlfields.html#s-f-Architecture
 // And: http://man7.org/linux/man-pages/man1/dpkg-architecture.1.html
 func (deb *DebPkg) SetArchitecture(arch string) {
@@ -171,7 +179,8 @@ func (deb *DebPkg) SetShortDescription(descr string) {
 // SetDescription sets the extended description over several lines. E.g:
 // "This tool will calculation the most efficient way to world domination"
 // NOTE: The debian control file has a special formatting of the long description
-//        this function replaces newlines with a newline and a space.
+//
+//	this function replaces newlines with a newline and a space.
 func (deb *DebPkg) SetDescription(descr string) {
 	deb.control.info.descr = " " + strings.Replace(descr, "\n", "\n ", -1)
 }
@@ -197,9 +206,13 @@ func (deb *DebPkg) SetVcsBrowser(url string) {
 // SetBuiltUsing incorporate parts of other packages when built but do not have to depend on those packages.
 // A package using the source code from the gcc-4.6-source binary package built from the gcc-4.6 source package
 // would have this field in its control file:
-//  Built-Using: gcc-4.6 (= 4.6.0-11)
+//
+//	Built-Using: gcc-4.6 (= 4.6.0-11)
+//
 // A package including binaries from grub2 and loadlin would have this field in its control file:
-//  Built-Using: grub2 (= 1.99-9), loadlin (= 1.6e-1)
+//
+//	Built-Using: grub2 (= 1.99-9), loadlin (= 1.6e-1)
+//
 // See: https://www.debian.org/doc/debian-policy/ch-relationships.html#s-built-using
 func (deb *DebPkg) SetBuiltUsing(info string) {
 	deb.control.info.builtUsing = info
@@ -216,7 +229,9 @@ func (deb *DebPkg) AddControlExtraString(name, s string) error {
 }
 
 // AddControlExtra allows the advanced user to add custom script to the control.tar.gz Typical usage is
-//  for preinst, postinst, postrm, prerm: https://www.debian.org/doc/debian-policy/ch-maintainerscripts.html
+//
+//	for preinst, postinst, postrm, prerm: https://www.debian.org/doc/debian-policy/ch-maintainerscripts.html
+//
 // And: https://www.debian.org/doc/manuals/maint-guide/dother.en.html#maintscripts
 // the files have possible DOS line-endings replaced by UNIX line-endings
 func (deb *DebPkg) AddControlExtra(name, filename string) error {

@@ -22,8 +22,9 @@ type DebPkg struct {
 }
 
 // New creates new debian package, optionally provide an tempdir to write
-//  intermediate files, otherwise os.TempDir is used. A provided tempdir must exist
-//  in order for it to work.
+//
+//	intermediate files, otherwise os.TempDir is used. A provided tempdir must exist
+//	in order for it to work.
 func New(tempDir ...string) *DebPkg {
 	deb := &DebPkg{
 		debianBinary: debianBinaryVersion,
