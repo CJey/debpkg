@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/xor-gate/debpkg"
+	"github.com/cjey/debpkg"
 )
 
 var (

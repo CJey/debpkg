@@ -9,7 +9,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/xor-gate/debpkg/internal/test"
+
+	"github.com/cjey/debpkg/internal/test"
 )
 
 // TestExampleConfig verifies if the config example in the root is correctly loaded
@@ -19,7 +20,7 @@ version: 7.6.5
 architecture: all
 maintainer: Deb Pkg
 maintainer_email: deb@pkg.com
-homepage: https://github.com/xor-gate/debpkg
+homepage: https://github.com/cjey/debpkg
 section: devel
 priority: standard
 depends: lsb-release
@@ -70,7 +71,7 @@ control_extra:
 		"Unexpected deb.control.info.maintainer")
 	assert.Equal(t, "deb@pkg.com", deb.control.info.maintainerEmail,
 		"Unexpected deb.control.info.maintainerEmail")
-	assert.Equal(t, "https://github.com/xor-gate/debpkg", deb.control.info.homepage,
+	assert.Equal(t, "https://github.com/cjey/debpkg", deb.control.info.homepage,
 		"Unexpected deb.control.info.homepage")
 	assert.Equal(t, "This is a short description", deb.control.info.descrShort,
 		"Unexpected short description")

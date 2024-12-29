@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/xor-gate/debpkg/internal/targzip"
+	"github.com/cjey/debpkg/internal/targzip"
 )
 
 type data struct {

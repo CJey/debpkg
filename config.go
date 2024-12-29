@@ -9,7 +9,7 @@ import (
 	"io/ioutil"
 	"strings"
 
-	"github.com/xor-gate/debpkg/internal/config"
+	"github.com/cjey/debpkg/internal/config"
 )
 
 // Config loads settings from a depkg.yml specfile

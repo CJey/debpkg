@@ -5,9 +5,11 @@
 package debpkg
 
 import (
-	"github.com/stretchr/testify/assert"
-	"github.com/xor-gate/debpkg/internal/test"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/cjey/debpkg/internal/test"
 )
 
 // Test correct output of a empty control file when no DepPkg Set* functions are called
@@ -38,8 +40,8 @@ Version: 0.0.0
 Architecture: amd64
 Maintainer:  <>
 Installed-Size: 0
-Vcs-Git: https://github.com/xor-gate/debpkg.git
-Vcs-Browser: https://github.com/xor-gate/debpkg
+Vcs-Git: https://github.com/cjey/debpkg.git
+Vcs-Browser: https://github.com/cjey/debpkg
 Description: 
 `
 	// Empty
@@ -49,8 +51,8 @@ Description:
 	// architecture is auto-set when empty, this makes sure it is always set to amd64
 	deb.SetArchitecture("amd64")
 	deb.SetVcsType(VcsTypeGit)
-	deb.SetVcsURL("https://github.com/xor-gate/debpkg.git")
-	deb.SetVcsBrowser("https://github.com/xor-gate/debpkg")
+	deb.SetVcsURL("https://github.com/cjey/debpkg.git")
+	deb.SetVcsBrowser("https://github.com/cjey/debpkg")
 
 	assert.Equal(t, controlExpect, deb.control.String(0))
 }

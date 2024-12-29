@@ -12,7 +12,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/xor-gate/debpkg/internal/test"
+
+	"github.com/cjey/debpkg/internal/test"
 )
 
 // testWrite writes the deb package to a temporary file and verifies with native dpkg tool when available

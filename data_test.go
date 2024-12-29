@@ -5,7 +5,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/xor-gate/debpkg/internal/targzip"
+
+	"github.com/cjey/debpkg/internal/targzip"
 )
 
 func newData(t *testing.T) *data {

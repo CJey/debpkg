@@ -10,7 +10,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/xor-gate/debpkg/internal/targzip"
+	"github.com/cjey/debpkg/internal/targzip"
 )
 
 type control struct {
@@ -45,8 +45,8 @@ type controlInfo struct {
 	descrShort      string  // Short package description
 	descr           string  // Long package description
 	vcsType         VcsType // E.g: "Svn", "Git" etcetera
-	vcsURL          string  // E.g: git@github.com:xor-gate/debpkg.git
-	vcsBrowser      string  // E.g: https://github.com/xor-gate/debpkg
+	vcsURL          string  // E.g: git@github.com:cjey/debpkg.git
+	vcsBrowser      string  // E.g: https://github.com/cjey/debpkg
 	builtUsing      string  // E.g: gcc-4.6 (= 4.6.0-11)
 }
 

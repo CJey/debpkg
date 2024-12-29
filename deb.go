@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/xor-gate/debpkg/internal/targzip"
+	"github.com/cjey/debpkg/internal/targzip"
 )
 
 // DebPkg holds data for a single debian package
