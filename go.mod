@@ -1,4 +1,4 @@
-module github.com/xor-gate/debpkg
+module github.com/cjey/debpkg
 
 go 1.23.4
 
