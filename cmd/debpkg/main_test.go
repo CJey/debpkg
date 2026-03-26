@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -10,7 +9,7 @@ import (
 
 func TestMainHappyFlow(t *testing.T) {
 	configFile = "/dev/null"
-	f, err := ioutil.TempFile("", "debpkg")
+	f, err := os.CreateTemp("", "debpkg")
 	require.Nil(t, err)
 	defer func() {
 		f.Close()

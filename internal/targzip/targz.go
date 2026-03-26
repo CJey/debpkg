@@ -9,7 +9,7 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
-	"io/ioutil"
+
 	"os"
 	"strings"
 	"time"
@@ -37,7 +37,7 @@ func newWriter(wc io.WriteCloser) *TarGzip {
 
 // NewTempFile create a new targzip writer tempfile
 func NewTempFile(dir string) (*TarGzip, error) {
-	f, err := ioutil.TempFile(dir, "debpkg")
+	f, err := os.CreateTemp(dir, "debpkg")
 	if err != nil {
 		return nil, err
 	}

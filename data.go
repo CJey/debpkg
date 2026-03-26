@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/cjey/debpkg/internal/targzip"
@@ -28,10 +29,8 @@ func (d *data) addDirectory(dirpath string) error {
 		dirpath = strings.Replace(dirpath, string(os.PathSeparator), "/", -1)
 	}
 	d.addParentDirectories(dirpath)
-	for _, addedDir := range d.dirs {
-		if addedDir == dirpath {
-			return nil
-		}
+	if slices.Contains(d.dirs, dirpath) {
+		return nil
 	}
 	if dirpath == "." {
 		return nil
@@ -53,11 +52,12 @@ func (d *data) addParentDirectories(filename string) {
 		dirname = strings.Replace(dirname, string(os.PathSeparator), "/", -1)
 	}
 	dirs := strings.Split(dirname, "/")
-	current := "/"
+	var current strings.Builder
+	current.WriteString("/")
 	for _, dir := range dirs {
 		if len(dir) > 0 {
-			current += dir + "/"
-			d.addDirectory(current)
+			current.WriteString(dir + "/")
+			d.addDirectory(current.String())
 		}
 	}
 }

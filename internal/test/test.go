@@ -5,7 +5,7 @@
 package test
 
 import (
-	"io/ioutil"
+	"io/fs"
 	"os"
 	"testing"
 
@@ -16,7 +16,7 @@ import (
 var tempdir string
 
 func init() {
-	tempdir, _ = ioutil.TempDir("", "debpkg-test")
+	tempdir, _ = os.MkdirTemp("", "debpkg-test")
 }
 
 // TempDir returns the current tempdir
@@ -32,7 +32,7 @@ func TempFile(t *testing.T) string {
 // WriteTempFile writes data to TempDir()/filename
 func WriteTempFile(filename, data string) (filepath string, err error) {
 	filepath = TempDir() + string(os.PathSeparator) + filename
-	err = ioutil.WriteFile(filepath, []byte(data), 0644)
+	err = os.WriteFile(filepath, []byte(data), 0644)
 	return
 }
 

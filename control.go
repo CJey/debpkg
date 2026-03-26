@@ -6,7 +6,8 @@ package debpkg
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
+
 	"math"
 	"strings"
 
@@ -235,7 +236,7 @@ func (deb *DebPkg) AddControlExtraString(name, s string) error {
 // And: https://www.debian.org/doc/manuals/maint-guide/dother.en.html#maintscripts
 // the files have possible DOS line-endings replaced by UNIX line-endings
 func (deb *DebPkg) AddControlExtra(name, filename string) error {
-	b, err := ioutil.ReadFile(filename)
+	b, err := os.ReadFile(filename)
 	if err != nil {
 		return err
 	}
