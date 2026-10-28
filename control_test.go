@@ -234,3 +234,38 @@ func TestConffiles(t *testing.T) {
 	deb.MarkConfigFile("bla/bla/foo")
 	assert.Equal(t, "bla/bla/foo\n", deb.control.conffiles)
 }
+
+// Test SetField: written after the standard fields in the order set, replaced or removed by a
+// case-insensitive name, the fields of the other Set* functions and multiline values refused
+func TestControlFileSetField(t *testing.T) {
+	controlExpect := `Package: 
+Version: 0.0.0
+Architecture: amd64
+Maintainer:  <>
+Installed-Size: 0
+Depends: ally
+Git-Commit: e9caee8
+Pre-Depends: dpkg (>= 1.19)
+Build-Time: 2026-10-28T14:22:16+08:00
+Description: 
+`
+	deb := New()
+	defer deb.Close()
+
+	deb.SetArchitecture("amd64")
+	deb.SetDepends("ally")
+	assert.Nil(t, deb.SetField("Git-Commit", "0000000"))
+	assert.Nil(t, deb.SetField("Pre-Depends", "dpkg (>= 1.19)"))
+	assert.Nil(t, deb.SetField("Git-Dirty", "no"))
+	assert.Nil(t, deb.SetField("Build-Time", " 2026-10-28T14:22:16+08:00\t"))
+	assert.Nil(t, deb.SetField("git-commit", "e9caee8"))
+	assert.Nil(t, deb.SetField("Git-Dirty", " "))
+	assert.Equal(t, controlExpect, deb.control.String(0))
+
+	for _, name := range []string{"", "#Note", "-Note", "Git Commit", "Git:Commit", "Gitä", "version", "VCS-Git"} {
+		assert.NotNil(t, deb.SetField(name, "x"), name)
+	}
+	for _, value := range []string{"a\nb", "a\rb", "a\x00b"} {
+		assert.NotNil(t, deb.SetField("Note", value), value)
+	}
+}

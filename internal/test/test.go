@@ -5,7 +5,6 @@
 package test
 
 import (
-	"io/fs"
 	"os"
 	"testing"
 

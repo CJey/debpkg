@@ -43,12 +43,18 @@ type controlInfo struct {
 	replaces        string
 	section         string
 	priority        Priority
-	descrShort      string  // Short package description
-	descr           string  // Long package description
-	vcsType         VcsType // E.g: "Svn", "Git" etcetera
-	vcsURL          string  // E.g: git@github.com:cjey/debpkg.git
-	vcsBrowser      string  // E.g: https://github.com/cjey/debpkg
-	builtUsing      string  // E.g: gcc-4.6 (= 4.6.0-11)
+	descrShort      string         // Short package description
+	descr           string         // Long package description
+	vcsType         VcsType        // E.g: "Svn", "Git" etcetera
+	vcsURL          string         // E.g: git@github.com:cjey/debpkg.git
+	vcsBrowser      string         // E.g: https://github.com/cjey/debpkg
+	builtUsing      string         // E.g: gcc-4.6 (= 4.6.0-11)
+	fields          []controlField // Set by SetField, in the order set
+}
+
+type controlField struct {
+	name  string
+	value string
 }
 
 // SetName sets the name of the binary package (mandatory)
@@ -219,6 +225,64 @@ func (deb *DebPkg) SetBuiltUsing(info string) {
 	deb.control.info.builtUsing = info
 }
 
+// SetField sets a field the other Set* functions do not cover, such as Pre-Depends, Breaks or a
+// user-defined one like Git-Commit, written after the standard fields and before Description.
+// Names are case-insensitive: setting one again replaces its value, an empty value removes it.
+// The value is a single line, its leading and trailing whitespace dropped.
+// See: https://www.debian.org/doc/debian-policy/ch-controlfields.html#syntax-of-control-files
+// and https://www.debian.org/doc/debian-policy/ch-controlfields.html#user-defined-fields
+func (deb *DebPkg) SetField(name, value string) error {
+	value = strings.TrimSpace(value)
+	if err := validField(name, value); err != nil {
+		return err
+	}
+	var fields = deb.control.info.fields
+	for i, f := range fields {
+		if strings.EqualFold(f.name, name) {
+			if value == "" {
+				deb.control.info.fields = append(fields[:i], fields[i+1:]...)
+			} else {
+				fields[i].value = value
+			}
+			return nil
+		}
+	}
+	if value != "" {
+		deb.control.info.fields = append(fields, controlField{name: name, value: value})
+	}
+	return nil
+}
+
+// ownFields the fields written by the other Set* functions, besides Vcs-*
+var ownFields = []string{"Package", "Version", "Architecture", "Maintainer", "Installed-Size", "Section",
+	"Priority", "Homepage", "Built-Using", "Depends", "Recommends", "Suggests", "Conflicts", "Provides",
+	"Replaces", "Description"}
+
+// validField a name is printable US-ASCII except space and colon, not beginning with # or -,
+// and not one of the fields written by the other Set* functions
+func validField(name, value string) error {
+	if name == "" || name[0] == '#' || name[0] == '-' {
+		return fmt.Errorf("invalid field name %q", name)
+	}
+	for _, c := range name {
+		if c <= ' ' || c > '~' || c == ':' {
+			return fmt.Errorf("invalid field name %q", name)
+		}
+	}
+	for _, own := range ownFields {
+		if strings.EqualFold(name, own) {
+			return fmt.Errorf("field %s is set by its own Set* function", name)
+		}
+	}
+	if len(name) > 4 && strings.EqualFold(name[:4], "Vcs-") {
+		return fmt.Errorf("field %s is set by SetVcsType, SetVcsURL and SetVcsBrowser", name)
+	}
+	if strings.ContainsFunc(value, func(c rune) bool { return c < ' ' && c != '\t' || c == 0x7f }) {
+		return fmt.Errorf("value of field %s is not a single line of text", name)
+	}
+	return nil
+}
+
 // AddControlExtraString is the same as AddControlExtra except it uses a string input.
 // the files have possible DOS line-endings replaced by UNIX line-endings
 func (deb *DebPkg) AddControlExtraString(name, s string) error {
@@ -297,56 +361,59 @@ func (c *control) size() int64 {
 
 // Create control file for control.tar.gz
 func (c *control) String(installedSize uint64) string {
-	var o string
+	var o strings.Builder
 
-	o += fmt.Sprintf("Package: %s\n", c.info.name)
-	o += fmt.Sprintf("Version: %s\n", c.version())
-	o += fmt.Sprintf("Architecture: %s\n", c.info.architecture)
-	o += fmt.Sprintf("Maintainer: %s <%s>\n",
+	o.WriteString(fmt.Sprintf("Package: %s\n", c.info.name))
+	o.WriteString(fmt.Sprintf("Version: %s\n", c.version()))
+	o.WriteString(fmt.Sprintf("Architecture: %s\n", c.info.architecture))
+	o.WriteString(fmt.Sprintf("Maintainer: %s <%s>\n",
 		c.info.maintainer,
-		c.info.maintainerEmail)
-	o += fmt.Sprintf("Installed-Size: %d\n", uint64(math.Ceil(float64(installedSize)/1024)))
+		c.info.maintainerEmail))
+	o.WriteString(fmt.Sprintf("Installed-Size: %d\n", uint64(math.Ceil(float64(installedSize)/1024))))
 
 	if c.info.section != "" {
-		o += fmt.Sprintf("Section: %s\n", c.info.section)
+		o.WriteString(fmt.Sprintf("Section: %s\n", c.info.section))
 	}
 	if c.info.priority != PriorityUnset {
-		o += fmt.Sprintf("Priority: %s\n", c.info.priority)
+		o.WriteString(fmt.Sprintf("Priority: %s\n", c.info.priority))
 	}
 	if c.info.homepage != "" {
-		o += fmt.Sprintf("Homepage: %s\n", c.info.homepage)
+		o.WriteString(fmt.Sprintf("Homepage: %s\n", c.info.homepage))
 	}
 	if c.info.vcsType != VcsTypeUnset && c.info.vcsURL != "" {
-		o += fmt.Sprintf("Vcs-%s: %s\n", c.info.vcsType, c.info.vcsURL)
+		o.WriteString(fmt.Sprintf("Vcs-%s: %s\n", c.info.vcsType, c.info.vcsURL))
 	}
 	if c.info.vcsBrowser != "" {
-		o += fmt.Sprintf("Vcs-Browser: %s\n", c.info.vcsBrowser)
+		o.WriteString(fmt.Sprintf("Vcs-Browser: %s\n", c.info.vcsBrowser))
 	}
 	if c.info.builtUsing != "" {
-		o += fmt.Sprintf("Built-Using: %s\n", c.info.builtUsing)
+		o.WriteString(fmt.Sprintf("Built-Using: %s\n", c.info.builtUsing))
 	}
 
 	if c.info.depends != "" {
-		o += fmt.Sprintf("Depends: %s\n", c.info.depends)
+		o.WriteString(fmt.Sprintf("Depends: %s\n", c.info.depends))
 	}
 	if c.info.recommends != "" {
-		o += fmt.Sprintf("Recommends: %s\n", c.info.recommends)
+		o.WriteString(fmt.Sprintf("Recommends: %s\n", c.info.recommends))
 	}
 	if c.info.suggests != "" {
-		o += fmt.Sprintf("Suggests: %s\n", c.info.suggests)
+		o.WriteString(fmt.Sprintf("Suggests: %s\n", c.info.suggests))
 	}
 	if c.info.conflicts != "" {
-		o += fmt.Sprintf("Conflicts: %s\n", c.info.conflicts)
+		o.WriteString(fmt.Sprintf("Conflicts: %s\n", c.info.conflicts))
 	}
 	if c.info.provides != "" {
-		o += fmt.Sprintf("Provides: %s\n", c.info.provides)
+		o.WriteString(fmt.Sprintf("Provides: %s\n", c.info.provides))
 	}
 	if c.info.replaces != "" {
-		o += fmt.Sprintf("Replaces: %s\n", c.info.replaces)
+		o.WriteString(fmt.Sprintf("Replaces: %s\n", c.info.replaces))
+	}
+	for _, f := range c.info.fields {
+		o.WriteString(fmt.Sprintf("%s: %s\n", f.name, f.value))
 	}
 
-	o += fmt.Sprintf("Description: %s\n", c.info.descrShort)
-	o += fmt.Sprintf("%s", c.info.descr)
+	o.WriteString(fmt.Sprintf("Description: %s\n", c.info.descrShort))
+	o.WriteString(fmt.Sprintf("%s", c.info.descr))
 
-	return o
+	return o.String()
 }

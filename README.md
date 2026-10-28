@@ -17,6 +17,7 @@ The feature list below describes the usability state of the project:
 - Create debian packages from files and folders
 - Create package from `debpkg.yml` specfile 
 - Add custom control files (preinst, postinst, prerm, postrm etcetera)
+- Set further control fields (`Pre-Depends`, `Breaks`, user-defined ones etcetera) with `SetField`
 
 It is currently not possible to use the `debpkg` as a framework to manipulate and introspect individual Debian package objects ([see issue #26](https://github.com/xor-gate/debpkg/issues/26)). As it is only capable of creating packages.
 
