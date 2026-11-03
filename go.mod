@@ -3,13 +3,13 @@ module github.com/cjey/debpkg
 go 1.27.2
 
 require (
+	github.com/ProtonMail/go-crypto v1.5.2
 	github.com/stretchr/testify v1.12.1
-	github.com/xor-gate/ar v0.0.0-20170530204233-5c72ae81e2b7
-	golang.org/x/crypto/openpgp v0.1.0-deprecated
-	gopkg.in/yaml.v2 v2.4.0
+	go.yaml.in/yaml/v3 v3.0.6
 )
 
 require (
-	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/crypto v0.58.1-0.20261009181718-2f1f834330b2 // indirect
+	github.com/cloudflare/circl v1.6.3 // indirect
+	golang.org/x/crypto v0.41.0 // indirect
+	golang.org/x/sys v0.35.0 // indirect
 )

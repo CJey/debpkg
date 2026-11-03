@@ -5,14 +5,35 @@
 package debpkg
 
 import (
-	"go/build"
+	"os"
+	"runtime"
+	"strings"
 )
 
-// GetArchitecture gets the current build.Default.GOARCH in debian-form
+// debianArch maps the GOARCH values whose Debian names differ, arm aside
+var debianArch = map[string]string{
+	"386":      "i386",
+	"mipsle":   "mipsel",
+	"mips64le": "mips64el",
+	"ppc64le":  "ppc64el",
+}
+
+// GetArchitecture returns the Debian architecture of $GOARCH, or of runtime.GOARCH when unset.
+// GOARCH=arm maps to armel for GOARM=5, otherwise to armhf, which Raspberry Pi OS also uses
+// for ARMv6.
 func GetArchitecture() string {
-	arch := build.Default.GOARCH
-	if arch == "386" {
-		return "i386"
+	goarch := os.Getenv("GOARCH")
+	if goarch == "" {
+		goarch = runtime.GOARCH
 	}
-	return arch
+	if goarch == "arm" {
+		if strings.HasPrefix(os.Getenv("GOARM"), "5") {
+			return "armel"
+		}
+		return "armhf"
+	}
+	if arch, ok := debianArch[goarch]; ok {
+		return arch
+	}
+	return goarch
 }

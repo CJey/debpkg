@@ -5,27 +5,33 @@
 package debpkg
 
 import (
+	"errors"
 	"fmt"
 	"os"
-
 	"strings"
 
 	"github.com/cjey/debpkg/internal/config"
 )
 
-// Config loads settings from a depkg.yml specfile
+// Config loads settings from a debpkg.yml specfile, its variables expanded first. It also resets
+// the standard fields the specfile leaves out, so Set* calls meant to override it come after it.
 func (deb *DebPkg) Config(filename string) error {
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		return fmt.Errorf("problem reading config file: %v", err)
-	}
-
-	dataExpanded, err := ExpandVar(string(data))
-	if err != nil {
+	if err := deb.check(); err != nil {
 		return err
 	}
+	return deb.setError(deb.config(filename))
+}
 
-	cfg, err := config.PkgSpecFileUnmarshal([]byte(dataExpanded))
+func (deb *DebPkg) config(filename string) error {
+	b, err := os.ReadFile(filename)
+	if err != nil {
+		return fmt.Errorf("read config file: %w", err)
+	}
+	expanded, err := deb.ExpandVar(string(b))
+	if err != nil {
+		return fmt.Errorf("expand config file: %w", err)
+	}
+	cfg, err := config.Parse([]byte(expanded))
 	if err != nil {
 		return err
 	}
@@ -47,66 +53,69 @@ func (deb *DebPkg) Config(filename string) error {
 	deb.SetConflicts(cfg.Conflicts)
 	deb.SetProvides(cfg.Provides)
 	deb.SetReplaces(cfg.Replaces)
+	deb.SetVcsType(VcsType(cfg.VcsType))
+	deb.SetVcsURL(cfg.VcsURL)
+	deb.SetVcsBrowser(cfg.VcsBrowser)
+	for _, f := range cfg.Fields {
+		if err := deb.SetField(f.Name, f.Value); err != nil {
+			return err
+		}
+	}
 
 	for _, file := range cfg.Files {
-		if len(file.File) > 0 {
-			if err := deb.AddFile(file.File, file.Dest); err != nil {
-				return fmt.Errorf("error adding file %s: %v", file.File, err)
+		dest := file.Dest
+		switch {
+		case file.File != "" && file.Content != "":
+			return fmt.Errorf("file %s has both 'file' and 'content'", file.File)
+		case file.File != "":
+			if err := deb.AddFile(file.File, dest); err != nil {
+				return fmt.Errorf("add file %s: %w", file.File, err)
 			}
-		} else if len(file.Content) > 0 {
-			if err := deb.AddFileString(file.Content, file.Dest); err != nil {
-				return fmt.Errorf("error adding file by string: %v", err)
+			if dest == "" {
+				dest = file.File
 			}
-		} else {
-			return fmt.Errorf("need either 'content' or a 'src' to add a file")
+		case file.Content != "":
+			if err := deb.AddFileString(file.Content, dest); err != nil {
+				return fmt.Errorf("add file %s: %w", dest, err)
+			}
+		default:
+			return errors.New("a file needs either 'file' or 'content'")
 		}
 		if file.ConfigFile {
-			deb.MarkConfigFile(file.Dest)
+			if err := deb.MarkConfigFile(dest); err != nil {
+				return fmt.Errorf("mark config file %s: %w", dest, err)
+			}
 		}
 	}
 
 	for _, dir := range cfg.Directories {
 		if err := deb.AddDirectory(dir); err != nil {
-			return fmt.Errorf("error adding directory %s: %v", dir, err)
+			return fmt.Errorf("add directory %s: %w", dir, err)
 		}
 	}
-
 	for _, dir := range cfg.EmptyDirectories {
-		err := deb.AddEmptyDirectory(dir)
+		if err := deb.AddEmptyDirectory(dir); err != nil {
+			return fmt.Errorf("add directory %s: %w", dir, err)
+		}
+	}
+
+	for _, script := range []struct{ name, value string }{
+		{"preinst", cfg.ControlExtra.Preinst},
+		{"postinst", cfg.ControlExtra.Postinst},
+		{"prerm", cfg.ControlExtra.Prerm},
+		{"postrm", cfg.ControlExtra.Postrm},
+	} {
+		if script.value == "" {
+			continue
+		}
+		// A script is given inline when it has a shebang or several lines, otherwise by its path
+		if strings.HasPrefix(script.value, "#!") || strings.Contains(script.value, "\n") {
+			err = deb.AddControlExtraString(script.name, script.value)
+		} else {
+			err = deb.AddControlExtra(script.name, script.value)
+		}
 		if err != nil {
-			return fmt.Errorf("error adding directory %s: %v", dir, err)
-		}
-	}
-
-	if len(cfg.ControlExtra.Preinst) > 0 {
-		if strings.ContainsAny(cfg.ControlExtra.Preinst, "\n") {
-			deb.AddControlExtraString("preinst", cfg.ControlExtra.Preinst)
-		} else {
-			deb.AddControlExtra("preinst", cfg.ControlExtra.Preinst)
-		}
-	}
-
-	if len(cfg.ControlExtra.Postinst) > 0 {
-		if strings.ContainsAny(cfg.ControlExtra.Postinst, "\n") {
-			deb.AddControlExtraString("postinst", cfg.ControlExtra.Postinst)
-		} else {
-			deb.AddControlExtra("postinst", cfg.ControlExtra.Postinst)
-		}
-	}
-
-	if len(cfg.ControlExtra.Prerm) > 0 {
-		if strings.ContainsAny(cfg.ControlExtra.Prerm, "\n") {
-			deb.AddControlExtraString("prerm", cfg.ControlExtra.Prerm)
-		} else {
-			deb.AddControlExtra("prerm", cfg.ControlExtra.Prerm)
-		}
-	}
-
-	if len(cfg.ControlExtra.Postrm) > 0 {
-		if strings.ContainsAny(cfg.ControlExtra.Postrm, "\n") {
-			deb.AddControlExtraString("postrm", cfg.ControlExtra.Postrm)
-		} else {
-			deb.AddControlExtra("postrm", cfg.ControlExtra.Postrm)
+			return fmt.Errorf("add %s: %w", script.name, err)
 		}
 	}
 	return nil

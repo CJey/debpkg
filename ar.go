@@ -5,97 +5,87 @@
 package debpkg
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
-	"time"
-
-	"github.com/xor-gate/ar"
+	"strings"
 )
 
-func addArFileFromBuffer(now time.Time, w *ar.Writer, name string, body []byte) error {
-	hdr := ar.Header{
-		Name:    name,
-		Size:    int64(len(body)),
-		Mode:    0644,
-		ModTime: now,
+// arWriter writes the common ar format of deb(5)
+type arWriter struct {
+	w     io.Writer
+	mtime int64
+}
+
+func (a *arWriter) add(name string, size int64, r io.Reader) error {
+	hdr := fmt.Sprintf("%-16s%-12d%-6d%-6d%-8o%-10d`\n", name, a.mtime, 0, 0, 0100644, size)
+	if len(hdr) != 60 {
+		return fmt.Errorf("ar member %s: name, size or time does not fit the header", name)
 	}
-
-	if err := w.WriteHeader(&hdr); err != nil {
-		return fmt.Errorf("cannot write file header: %v", err)
+	if _, err := io.WriteString(a.w, hdr); err != nil {
+		return err
 	}
-
-	_, err := w.Write(body)
-
+	if _, err := io.CopyN(a.w, r, size); err != nil {
+		return err
+	}
+	if size%2 == 0 {
+		return nil
+	}
+	_, err := io.WriteString(a.w, "\n")
 	return err
 }
 
-func addArFile(now time.Time, w *ar.Writer, dstname, filename string) error {
+func (a *arWriter) addFile(name, filename string) error {
 	f, err := os.Open(filename)
 	if err != nil {
 		return err
 	}
-
-	stat, err := f.Stat()
+	defer f.Close()
+	fi, err := f.Stat()
 	if err != nil {
-		f.Close()
 		return err
 	}
-
-	hdr := ar.Header{
-		Name:    dstname,
-		Size:    stat.Size(),
-		Mode:    0644,
-		ModTime: now,
-	}
-
-	if err := w.WriteHeader(&hdr); err != nil {
-		f.Close()
-		return fmt.Errorf("cannot write file header: %v", err)
-	}
-
-	_, err = io.Copy(w, f)
-	f.Close()
-
-	return err
+	return a.add(name, fi.Size(), f)
 }
 
-func (deb *DebPkg) createDebAr(filename string) error {
-	removeDeb := true
-	fd, err := os.Create(filename)
+func (deb *DebPkg) createDebAr(filename string, signature []byte) (err error) {
+	f, err := os.Create(filename)
 	if err != nil {
-		return fmt.Errorf("unable to create: %s", filename)
+		return err
 	}
-
 	defer func() {
-		fd.Close()
-		if removeDeb {
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+		if err == nil {
+			return
+		}
+		// Remove the partial package, but never a device such as /dev/stdout or a link
+		if fi, lerr := os.Lstat(filename); lerr == nil && fi.Mode().IsRegular() {
 			os.Remove(filename)
 		}
 	}()
 
-	now := time.Now()
-	w := ar.NewWriter(fd)
-
-	if err := w.WriteGlobalHeader(); err != nil {
-		return fmt.Errorf("cannot write ar header to deb file: %v", err)
+	w := bufio.NewWriter(f)
+	ar := arWriter{w: w, mtime: deb.date.now().Unix()}
+	if _, err := io.WriteString(w, "!<arch>\n"); err != nil {
+		return err
 	}
-	if err := addArFileFromBuffer(now, w, "debian-binary", []byte(deb.debianBinary)); err != nil {
-		return fmt.Errorf("cannot pack debian-binary: %v", err)
+	if err := ar.add("debian-binary", int64(len(debianBinary)), strings.NewReader(debianBinary)); err != nil {
+		return fmt.Errorf("add debian-binary: %w", err)
 	}
-	if err := addArFile(now, w, "control.tar.gz", deb.control.tgz.Name()); err != nil {
-		return fmt.Errorf("cannot add control.tar.gz to deb: %v", err)
+	if err := ar.addFile("control.tar.gz", deb.control.tgz.Name()); err != nil {
+		return fmt.Errorf("add control.tar.gz: %w", err)
 	}
-	if err := addArFile(now, w, "data.tar.gz", deb.data.tgz.Name()); err != nil {
-		return fmt.Errorf("cannot add data.tar.gz to deb: %v", err)
+	if err := ar.addFile("data.tar.gz", deb.data.tgz.Name()); err != nil {
+		return fmt.Errorf("add data.tar.gz: %w", err)
 	}
-	if deb.digest.clearsign != "" {
-		if err := addArFileFromBuffer(now, w, "digests.asc", []byte(deb.digest.clearsign)); err != nil {
-			return fmt.Errorf("cannot add digests.asc to deb: %v", err)
+	if signature != nil {
+		if err := ar.add(digestMember, int64(len(signature)), bytes.NewReader(signature)); err != nil {
+			return fmt.Errorf("add %s: %w", digestMember, err)
 		}
 	}
-
-	removeDeb = false
-
-	return nil
+	return w.Flush()
 }

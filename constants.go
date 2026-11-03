@@ -31,15 +31,13 @@ const (
 	VcsTypeSubversion VcsType = "Svn"   // Subversion
 )
 
-// Default installation variables
+// Default installation variables, see SetVar. Relative directories are below INSTALLPREFIX.
 const (
-	DefaultInstallPrefix = "/usr"  // Default install Prefix
-	DefaultBinDir        = "bin"   // Default binary directory
-	DefaultSbinDir       = "sbin"  // Default sbin directory
-	DefaultSysConfDir    = "etc"   // Default configuration directory
-	DefaultDataRootDir   = "share" // Default data root directory
+	DefaultInstallPrefix = "/usr"
+	DefaultBinDir        = "bin"
+	DefaultSbinDir       = "sbin"
+	DefaultSysConfDir    = "/etc"
+	DefaultDataRootDir   = "share"
 )
 
-const debianPathSeparator = "/"
-const debianBinaryVersion = "2.0\n"
-const debianFileExtension = "deb"
+const debianBinary = "2.0\n"

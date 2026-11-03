@@ -8,22 +8,26 @@ import (
 	"errors"
 )
 
-// ErrClosed when the file I/O is requested and it is already closed
-var ErrClosed = errors.New("debpkg: Closed")
+// ErrClosed is returned when the package is used after Close or Write
+var ErrClosed = errors.New("debpkg: closed")
 
-// ErrIO is returned when any file I/O failed
+// ErrIO is returned when the intermediate files cannot be created
 var ErrIO = errors.New("debpkg: I/O failed")
 
-// setError sets the package error when not nil
-// setting an error when the current error is ErrClosed it will panic
+// check returns the kept error, which takes precedence over ErrClosed.
+func (deb *DebPkg) check() error {
+	if deb.err != nil {
+		return deb.err
+	}
+	if deb.closed {
+		return ErrClosed
+	}
+	return nil
+}
+
+// setError keeps the first error, so that a package is never written with parts missing.
 func (deb *DebPkg) setError(err error) error {
-	if err == nil {
-		return nil
-	}
-	if deb.err == ErrClosed {
-		panic("debpkg: Trying to overwrite ErrClosed")
-	}
-	if err != ErrClosed {
+	if err != nil && deb.err == nil {
 		deb.err = err
 	}
 	return err

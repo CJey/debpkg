@@ -5,10 +5,12 @@
 package config
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
-	"runtime"
+	"io"
 
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v3"
 )
 
 // PkgSpecFile represents a single debian package
@@ -20,26 +22,30 @@ type PkgSpecFile struct {
 	MaintainerEmail string `yaml:"maintainer_email"`
 	Homepage        string `yaml:"homepage"`
 	Section         string `yaml:"section"`
+	Priority        string `yaml:"priority"`
 	Depends         string `yaml:"depends"`
 	Recommends      string `yaml:"recommends"`
 	Suggests        string `yaml:"suggests"`
 	Conflicts       string `yaml:"conflicts"`
 	Provides        string `yaml:"provides"`
 	Replaces        string `yaml:"replaces"`
-	Priority        string `yaml:"priority"`
 	BuiltUsing      string `yaml:"built_using"`
+	VcsType         string `yaml:"vcs_type"`
+	VcsURL          string `yaml:"vcs_url"`
+	VcsBrowser      string `yaml:"vcs_browser"`
+	Fields          Fields `yaml:"fields"`
 	Description     struct {
 		Short string `yaml:"short"`
 		Long  string `yaml:"long"`
-	}
+	} `yaml:"description"`
 	Files []struct {
 		File       string `yaml:"file"`
 		Dest       string `yaml:"dest"`
 		Content    string `yaml:"content"`
 		ConfigFile bool   `yaml:"conffile"`
-	} `yaml:",flow"`
-	Directories      []string `yaml:",flow"`
-	EmptyDirectories []string `yaml:"emptydirs,flow"`
+	} `yaml:"files"`
+	Directories      []string `yaml:"directories"`
+	EmptyDirectories []string `yaml:"emptydirs"`
 	ControlExtra     struct {
 		Preinst  string `yaml:"preinst"`
 		Postinst string `yaml:"postinst"`
@@ -48,26 +54,38 @@ type PkgSpecFile struct {
 	} `yaml:"control_extra"`
 }
 
-// PkgSpecFileUnmarshal loads the configuration data into a PkgSpecFile structure
-func PkgSpecFileUnmarshal(data []byte) (*PkgSpecFile, error) {
-	cfg := &PkgSpecFile{
-		Name:            "unknown",
-		Version:         "0.1.0+dev",
-		Architecture:    "any",
-		Maintainer:      "anonymous",
-		MaintainerEmail: "anon@foo.bar",
-		Homepage:        "https://www.google.com",
-		Section:         "misc",
-		Priority:        "optional",
-		BuiltUsing:      runtime.Version(),
-	}
-	cfg.Description.Long = "-"
-	cfg.Description.Short = "-"
+// Field is a control field to set with SetField
+type Field struct {
+	Name  string
+	Value string
+}
 
-	err := yaml.Unmarshal(data, &cfg)
-	if err != nil {
-		return nil, fmt.Errorf("problem unmarshaling config file: %v", err)
-	}
+// Fields is decoded from a mapping, keeping its order
+type Fields []Field
 
+// UnmarshalYAML implements yaml.Unmarshaler
+func (f *Fields) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("line %d: fields must be a mapping", node.Line)
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		var value string
+		if err := node.Content[i+1].Decode(&value); err != nil {
+			return err
+		}
+		*f = append(*f, Field{Name: node.Content[i].Value, Value: value})
+	}
+	return nil
+}
+
+// Parse decodes a specfile, rejecting unknown keys. Version, section and priority default to
+// 0.1.0+dev, misc and optional.
+func Parse(data []byte) (*PkgSpecFile, error) {
+	cfg := &PkgSpecFile{Version: "0.1.0+dev", Section: "misc", Priority: "optional"}
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(cfg); err != nil && !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("parse config file: %w", err)
+	}
 	return cfg, nil
 }

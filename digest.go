@@ -9,128 +9,97 @@ import (
 	"crypto"
 	"crypto/md5"
 	"crypto/sha1"
+	"errors"
 	"fmt"
-	"hash"
 	"io"
 	"os"
+	"strings"
 	"time"
 
-	"golang.org/x/crypto/openpgp"
-	"golang.org/x/crypto/openpgp/clearsign"
-	"golang.org/x/crypto/openpgp/packet"
+	"github.com/ProtonMail/go-crypto/openpgp"
+	"github.com/ProtonMail/go-crypto/openpgp/clearsign"
+	"github.com/ProtonMail/go-crypto/openpgp/packet"
 )
 
-const digestDefaultHash = crypto.SHA1
-const digestVersion = 4
-const digestRole = "builder"
+// The digest format of dpkg-sig, which verifies the ar member named after the role.
+// See: https://manpages.debian.org/bullseye/dpkg-sig/dpkg-sig.1.en.html
+const (
+	digestVersion = 4
+	digestRole    = "builder"
+	digestMember  = "_gpg" + digestRole
+)
 
-// Digest file for GPG signing
-type digest struct {
-	plaintext string // Plaintext package digest (empty when unsigned)
-	clearsign string // GPG clearsigned package digest (empty when unsigned)
-	signer    string // Name <email>
-	date      string // Mon Jan 2 15:04:05 2006 (time.ANSIC)
-	files     string // Multiple "\t<md5sum> <sha1sum> <size> <filename>"
-	// E.g:
-	//       3cf918272ffa5de195752d73f3da3e5e 7959c969e092f2a5a8604e2287807ac5b1b384ad 4 debian-binary
-	//       79bb73dbb522dc1a2dd1b9c2ec89fc79 26d29d15aad5c0e051d07571e28da2bc0009707e 366 control.tar.gz
-	//       e1a6e48c95a760170029ef7872cec994 e02ed99e5c4fd847bde12b4c2c30dd814b26ec27 136 data.tar.gz
+// digestFile is an ar member as listed in the digest
+type digestFile struct {
+	name      string
+	md5, sha1 []byte
+	size      int64
 }
 
-// Create unsigned digest file at toplevel of deb package
-// NOTE: the deb.digest.version and deb.digest.role are set in this function!
-func createDigestFileString(deb *DebPkg) string {
-	const digestFileTmpl = `Version: %d
-Signer: %s
-Date: %s
-Role: %s
-Files: 
-%s`
-	// debian-binary
-	md5sum, _ := digestCalcDataHash(bytes.NewBuffer([]byte(deb.debianBinary)), md5.New())
-	sha1sum, _ := digestCalcDataHash(bytes.NewBuffer([]byte(deb.debianBinary)), sha1.New())
-	deb.digest.files += fmt.Sprintf("\t%x %x %d %s\n",
-		md5sum,
-		sha1sum,
-		len(deb.debianBinary),
-		"debian-binary")
-
-	deb.digestAddFile("control.tar.gz", deb.control.tgz.Name(), deb.control.tgz.Size())
-	deb.digestAddFile("data.tar.gz", deb.data.tgz.Name(), deb.data.tgz.Size())
-
-	return fmt.Sprintf(digestFileTmpl,
-		digestVersion,
-		deb.digest.signer,
-		deb.digest.date,
-		digestRole,
-		deb.digest.files)
+func hashFile(name string, r io.Reader) (digestFile, error) {
+	m, s := md5.New(), sha1.New()
+	n, err := io.Copy(io.MultiWriter(m, s), r)
+	if err != nil {
+		return digestFile{}, err
+	}
+	return digestFile{name: name, md5: m.Sum(nil), sha1: s.Sum(nil), size: n}, nil
 }
 
-func (deb *DebPkg) digestAddFile(filename, filepath string, size int64) {
-	md5sum, _ := digestCalcDataHashFromFile(filepath, md5.New())
-	sha1sum, _ := digestCalcDataHashFromFile(filepath, sha1.New())
-	deb.digest.files += fmt.Sprintf("\t%x %x %d %s\n",
-		md5sum,
-		sha1sum,
-		size,
-		filename)
-}
-
-func digestCalcDataHashFromFile(filename string, hash hash.Hash) (string, error) {
+func hashArchive(name, filename string) (digestFile, error) {
 	f, err := os.Open(filename)
 	if err != nil {
-		return "", err
+		return digestFile{}, err
 	}
 	defer f.Close()
-	return digestCalcDataHash(f, hash)
+	return hashFile(name, f)
 }
 
-func digestCalcDataHash(in io.Reader, hash hash.Hash) (string, error) {
-	var result []byte
-	if _, err := io.Copy(hash, in); err != nil {
-		return "", err
+func digestText(signer string, date time.Time, files []digestFile) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Version: %d\nSigner: %s\nDate: %s\nRole: %s\nFiles: \n",
+		digestVersion, signer, date.Format(time.ANSIC), digestRole)
+	for _, f := range files {
+		fmt.Fprintf(&b, "\t%x %x %d %s\n", f.md5, f.sha1, f.size, f.name)
 	}
-	return string(hash.Sum(result)), nil
+	return b.String()
 }
 
-// WriteSigned package with GPG entity
-func (deb *DebPkg) WriteSigned(filename string, entity *openpgp.Entity) error {
-	var buf bytes.Buffer
-	var cfg packet.Config
-	var signer string
-	cfg.DefaultHash = digestDefaultHash
-
-	for id := range entity.Identities {
-		// TODO real search for keyid, need to investigate maybe a subkey?
-		signer = id
+// sign returns the clearsigned digest of the members written before it. The signature is
+// randomized by go-crypto and dated now, even when SOURCE_DATE_EPOCH is set.
+func (deb *DebPkg) sign(entity *openpgp.Entity) ([]byte, error) {
+	now := time.Now()
+	key, ok := entity.SigningKey(now)
+	if !ok || key.PrivateKey == nil {
+		return nil, errors.New("entity has no valid private signing key")
 	}
-
-	deb.digest.date = time.Now().Format(time.ANSIC)
-	deb.digest.signer = signer
-
-	clearsign, err := clearsign.Encode(&buf, entity.PrivateKey, &cfg)
+	debianBinaryDigest, err := hashFile("debian-binary", strings.NewReader(debianBinary))
 	if err != nil {
-		return fmt.Errorf("error while signing: %s", err)
+		return nil, err
+	}
+	controlDigest, err := hashArchive("control.tar.gz", deb.control.tgz.Name())
+	if err != nil {
+		return nil, err
+	}
+	dataDigest, err := hashArchive("data.tar.gz", deb.data.tgz.Name())
+	if err != nil {
+		return nil, err
+	}
+	var signer string
+	if id := entity.PrimaryIdentity(); id != nil {
+		signer = id.Name
 	}
 
-	if err := deb.writeControlData(); err != nil {
-		return err
+	var buf bytes.Buffer
+	w, err := clearsign.Encode(&buf, key.PrivateKey, &packet.Config{DefaultHash: crypto.SHA256})
+	if err != nil {
+		return nil, err
 	}
-
-	deb.digest.plaintext = createDigestFileString(deb)
-
-	if _, err = clearsign.Write([]byte(deb.digest.plaintext)); err != nil {
-		return fmt.Errorf("error from Write: %s", err)
+	text := digestText(signer, now, []digestFile{debianBinaryDigest, controlDigest, dataDigest})
+	if _, err := io.WriteString(w, text); err != nil {
+		return nil, err
 	}
-
-	if err = clearsign.Close(); err != nil {
-		return fmt.Errorf("error from Close: %s", err)
+	if err := w.Close(); err != nil {
+		return nil, err
 	}
-
-	deb.digest.clearsign = buf.String()
-
-	if filename == "" {
-		filename = deb.GetFilename()
-	}
-	return deb.createDebAr(filename)
+	return buf.Bytes(), nil
 }

@@ -6,55 +6,42 @@ package test
 
 import (
 	"os"
+	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
-	"golang.org/x/crypto/openpgp"
-	"golang.org/x/crypto/openpgp/armor"
+	"github.com/ProtonMail/go-crypto/openpgp"
+	"github.com/ProtonMail/go-crypto/openpgp/packet"
 )
 
-var tempdir string
-
-func init() {
-	tempdir, _ = os.MkdirTemp("", "debpkg-test")
-}
-
-// TempDir returns the current tempdir
-func TempDir() string {
-	return tempdir
-}
-
-// TempFile calculates the debian package filename based on os.TempDir() and t.Name()
+// TempFile returns the path of a package file in a temporary directory of the test
 func TempFile(t *testing.T) string {
-	return TempDir() + string(os.PathSeparator) + t.Name() + ".deb"
+	return filepath.Join(t.TempDir(), "test.deb")
 }
 
-// WriteTempFile writes data to TempDir()/filename
-func WriteTempFile(filename, data string) (filepath string, err error) {
-	filepath = TempDir() + string(os.PathSeparator) + filename
-	err = os.WriteFile(filepath, []byte(data), 0644)
-	return
-}
-
-// TempOpenPGPIdentity creates a new identity in TempDir()
-func TempOpenPGPIdentity() (e *openpgp.Entity, err error) {
-	// Create random new GPG identity for signage
-	e, _ = openpgp.NewEntity("Debpkg Authors", "", "debpkg-authors@xor-gate.org", nil)
-
-	// Sign all the identities
-	for _, id := range e.Identities {
-		if err = id.SelfSignature.SignUserId(id.UserId.Id, e.PrimaryKey, e.PrivateKey, nil); err != nil {
-			return
-		}
+// WriteTempFile writes data to name in a temporary directory of the test and returns its path
+func WriteTempFile(t *testing.T, name, data string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(p, []byte(data), 0644); err != nil {
+		t.Fatal(err)
 	}
+	return p
+}
 
-	f, _ := os.Create(TempDir() + string(os.PathSeparator) + "openpgp-testkey.asc")
-	w, _ := armor.Encode(f, openpgp.PublicKeyType, nil)
-	devnull, _ := os.Open(os.DevNull)
-	e.SerializePrivate(devnull, nil)
-	devnull.Close()
-	e.Serialize(w)
-	w.Close()
-	f.Close()
+var identity = sync.OnceValues(func() (*openpgp.Entity, error) {
+	// Created in the past, so that a signature made right away is never dated before it
+	cfg := &packet.Config{Algorithm: packet.PubKeyAlgoEdDSA, Time: func() time.Time { return time.Unix(1e9, 0) }}
+	return openpgp.NewEntity("Debpkg Authors", "", "debpkg-authors@xor-gate.org", cfg)
+})
 
-	return
+// OpenPGPIdentity returns a signing identity shared by the tests
+func OpenPGPIdentity(t *testing.T) *openpgp.Entity {
+	t.Helper()
+	e, err := identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return e
 }
